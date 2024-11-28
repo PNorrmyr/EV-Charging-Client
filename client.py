@@ -1,3 +1,5 @@
+import json
+
 import requests
 import time
 
@@ -52,6 +54,24 @@ def getBatteryPercent():
     except requests.exceptions.RequestException as e:
         print(f"Error connecting to server: {e}")
 
+def turnOnCharger():
+    urlBattery = "http://127.0.0.1:5000/charge"
+
+    payload = { "charging": "on" }
+    headers = { "Content-Type": "application/json" }
+
+    try:
+        response = requests.post(urlBattery, data=json.dumps(payload), headers=headers)
+        if response.status_code == 200:
+            return True
+
+        else:
+            print(f"Error getting data from server: {response.status_code}")
+            return False
+
+    except requests.exceptions.RequestException as e:
+        print(f"Error connecting to server: {e}")
+        return False
 
 def getHouseConsumption():
     url = "http://127.0.0.1:5000/baseload"
@@ -89,10 +109,25 @@ while isRunning:
             print(getHouseConsumption())
 
         elif option == 3:
-            if getBatteryPercent() is None:
-                continue
-            else:
-                print(f"Battery charged: {getBatteryPercent()} %")
+            batteryPercent = getBatteryPercent()
+            turnOnCharger()
+            batteryCharged = False
+
+            while not batteryCharged:
+                if batteryPercent is None:
+                    print("Failed to retrieve battery percentage, retrying...")
+                    time.sleep(2)
+                    batteryPercent = getBatteryPercent()
+                    continue
+
+                if batteryPercent >= 80:
+                    print("Battery charged to 80%.")
+                    batteryCharged = True
+                else:
+                    print(f"Battery charged: {batteryPercent} %")
+                    time.sleep(4)
+                    batteryPercent = getBatteryPercent()
+
         elif option == 4:
             print("option 4")
         elif option == 5:
