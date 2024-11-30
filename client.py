@@ -18,7 +18,6 @@ def printMenu():
     print("8. Exit")
     print("---------------------------------------\nWhat would you like to do? ")
 
-
 def getPricePerHour():
     url = "http://127.0.0.1:5000/priceperhour"
 
@@ -39,7 +38,6 @@ def getPricePerHour():
 
     except requests.exceptions.RequestException as e:
         print(f"Error connecting to server: {e}")
-
 
 def getBatteryPercent():
     urlBattery = "http://127.0.0.1:5000/charge"
@@ -202,7 +200,6 @@ def simulateChargingProcess():
                 print(f"Battery reached {round(batteryCapacityLimit)}%, stopping charging.")
                 break
 
-
 def plotChargingSimulation():
     hours = np.arange(24)
     houseConsumption = getHouseConsumption()
@@ -210,21 +207,17 @@ def plotChargingSimulation():
 
     fig, ax1 = plt.subplots(figsize=(10, 6))
 
-    # Plot house consumption
     ax1.plot(hours, houseConsumption, label='House Consumption (kW)', color='blue', marker='o')
 
-    # Plot total consumption (house + charger)
     ax1.plot(hours, totalConsumption, label='Total Consumption (kW)', color='orange', linestyle='--', marker='s')
 
     ax1.set_xlabel('Hour of Day')
     ax1.set_ylabel('Consumption (kW)', color='blue')
     ax1.tick_params(axis='y', labelcolor='blue')
 
-    # Highlight optimal charging hours
     for hour in optimalHours:
         ax1.axvline(x=hour, color='green', linestyle='--', alpha=0.5)
 
-    # Add title and legend
     fig.suptitle('Charging Management Over 24 Hours')
     fig.legend(loc='upper right', bbox_to_anchor=(1, 0.85))
 
@@ -232,7 +225,6 @@ def plotChargingSimulation():
     plt.show()
 
 print("Welcome to the EVCharging")
-
 
 isRunning = True
 
