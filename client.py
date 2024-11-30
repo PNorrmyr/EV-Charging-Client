@@ -2,6 +2,8 @@ import json
 import requests
 import time
 import keyboard
+import matplotlib.pyplot as plt
+import numpy as np
 
 
 def printMenu():
@@ -154,8 +156,7 @@ def getBatteryCapacity():
         print(f"Error connecting to server: {e}")
         return None
 
-
-def getOptimalHoursandLoad():
+def getOptimalHoursandTotalLoad():
     houseConsumption = getHouseConsumption()
     chargerConsumption = 7.4
     optimalHours = []
@@ -165,35 +166,70 @@ def getOptimalHoursandLoad():
         if consumption + chargerConsumption <= 11:
             optimalHours.append(i)
             totalConsumption.append(consumption + chargerConsumption)
+        else:
+            totalConsumption.append(consumption)
+
     return optimalHours, totalConsumption
 
-
 def simulateChargingProcess():
-    optimalHours, _ = getOptimalHoursandLoad()
+    optimalHours, _ = getOptimalHoursandTotalLoad()
     batteryCapacityLimit = 80
 
     while True:
         simHour, simMin = getServerTime()
+        batteryPercent = getBatteryPercent()
+
         if simHour is None or simMin is None:
             print("Error in fetching simulation time")
             continue
 
-        batteryPercent = getBatteryPercent()
-
-        if batteryPercent >= batteryCapacityLimit:
-            turnOffCharger()
-            print(f"Battery reached {batteryCapacityLimit}%, stopping charging.")
-            break
-
-        if simHour in optimalHours:
-            turnOnCharger()
-            print(f"Current time: {simHour}:{simMin}, Charging ON, Battery: {round(batteryPercent)}%")
-        else:
+        if simHour not in optimalHours:
             turnOffCharger()
             print(f"Current time: {simHour}:{simMin}, Charging OFF, Battery: {round(batteryPercent)}%")
+        else:
+            if batteryPercent < batteryCapacityLimit:
+                turnOnCharger()
+                print(f"Current time: {simHour}:{simMin}, Charging ON, Battery: {round(batteryPercent)}%")
+                # Fetch updated battery percentage
+                time.sleep(0.1)
+                batteryPercent = getBatteryPercent()
+                if round(batteryPercent) >= batteryCapacityLimit:
+                    turnOffCharger()
+                    print(f"Battery reached {round(batteryCapacityLimit)}%, stopping charging.")
+                    break
+            else:
+                turnOffCharger()
+                print(f"Battery reached {round(batteryCapacityLimit)}%, stopping charging.")
+                break
 
-        time.sleep(0.1)
 
+def plotChargingSimulation():
+    hours = np.arange(24)
+    houseConsumption = getHouseConsumption()
+    optimalHours, totalConsumption = getOptimalHoursandTotalLoad()
+
+    fig, ax1 = plt.subplots(figsize=(10, 6))
+
+    # Plot house consumption
+    ax1.plot(hours, houseConsumption, label='House Consumption (kW)', color='blue', marker='o')
+
+    # Plot total consumption (house + charger)
+    ax1.plot(hours, totalConsumption, label='Total Consumption (kW)', color='orange', linestyle='--', marker='s')
+
+    ax1.set_xlabel('Hour of Day')
+    ax1.set_ylabel('Consumption (kW)', color='blue')
+    ax1.tick_params(axis='y', labelcolor='blue')
+
+    # Highlight optimal charging hours
+    for hour in optimalHours:
+        ax1.axvline(x=hour, color='green', linestyle='--', alpha=0.5)
+
+    # Add title and legend
+    fig.suptitle('Charging Management Over 24 Hours')
+    fig.legend(loc='upper right', bbox_to_anchor=(1, 0.85))
+
+    plt.grid()
+    plt.show()
 
 print("Welcome to the EVCharging")
 
@@ -251,6 +287,7 @@ while isRunning:
 
         elif option == 4:
             simulateChargingProcess()
+            plotChargingSimulation()
 
         elif option == 5:
             print("5. Charge to 80% during optimal electricity price")
