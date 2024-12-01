@@ -5,8 +5,9 @@ import keyboard
 import matplotlib.pyplot as plt
 import numpy as np
 
+headers = { "Content-Type": "application/json" }
 
-def printMenu():
+def print_menu():
     print("---------------------------------------")
     print("1. Get price for area 3 Stockholm")
     print("2. Get household consumption")
@@ -18,32 +19,23 @@ def printMenu():
     print("8. Exit")
     print("---------------------------------------\nWhat would you like to do? ")
 
-def getPricePerHour():
+
+def get_price_per_hour():
     url = "http://127.0.0.1:5000/priceperhour"
 
     try:
         response = requests.get(url)
-
-        if response.status_code == 200:
-            data = response.json()
-            print("Price/h starting from 00:00: ")
-            output = ""
-            hour = 0
-
-            for price in data:
-                output += f"{hour}:00 - {price} öre\n"
-                hour = hour + 1
-
-            return output.strip()
-
+        response.raise_for_status()
+        return response.json()
     except requests.exceptions.RequestException as e:
         print(f"Error connecting to server: {e}")
 
-def getBatteryPercent():
-    urlBattery = "http://127.0.0.1:5000/charge"
+
+def get_battery_percent():
+    url = "http://127.0.0.1:5000/charge"
 
     try:
-        response = requests.get(urlBattery)
+        response = requests.get(url)
 
         if response.status_code == 200:
             data = response.json()
@@ -55,14 +47,14 @@ def getBatteryPercent():
     except requests.exceptions.RequestException as e:
         print(f"Error connecting to server: {e}")
 
-def turnOnCharger():
-    urlBattery = "http://127.0.0.1:5000/charge"
 
-    payload = { "charging": "on" }
-    headers = { "Content-Type": "application/json" }
+def turn_on_charger():
+    url = "http://127.0.0.1:5000/charge"
+
+    payload = {"charging": "on"}
 
     try:
-        response = requests.post(urlBattery, data=json.dumps(payload), headers=headers)
+        response = requests.post(url, data=json.dumps(payload), headers=headers)
         if response.status_code == 200:
             return True
 
@@ -74,14 +66,14 @@ def turnOnCharger():
         print(f"Error connecting to server: {e}")
         return False
 
-def turnOffCharger():
-    urlBattery = "http://127.0.0.1:5000/charge"
 
-    payload = { "charging": "off" }
-    headers = { "Content-Type": "application/json" }
+def turn_off_charger():
+    url = "http://127.0.0.1:5000/charge"
+
+    payload = {"charging": "off"}
 
     try:
-        response = requests.post(urlBattery, data=json.dumps(payload), headers=headers)
+        response = requests.post(url, data=json.dumps(payload), headers=headers)
         if response.status_code == 200:
             return True
 
@@ -93,24 +85,22 @@ def turnOffCharger():
         print(f"Error connecting to server: {e}")
         return False
 
-def getHouseConsumption():
+
+def get_house_consumption():
     url = "http://127.0.0.1:5000/baseload"
 
     try:
         response = requests.get(url)
         response.raise_for_status()
-
-        data = response.json()
-        return data
-
+        return response.json()
     except requests.exceptions.RequestException as e:
         print(f"Error connecting to server: {e}")
+
 
 def discharge():
     url = "http://127.0.0.1:5000/discharge"
 
     payload = { "discharging": "on"}
-    headers = { "Content-Type": "application/json" }
 
     try:
         response = requests.post(url, data=json.dumps(payload), headers=headers)
@@ -123,7 +113,8 @@ def discharge():
         print(f"Error connecting to server: {e}")
         return False
 
-def getServerTime():
+
+def get_server_time():
     url = "http://127.0.0.1:5000/info"
 
     try:
@@ -131,15 +122,16 @@ def getServerTime():
         response.raise_for_status()
 
         data = response.json()
-        simHour = data["sim_time_hour"]
-        simMinute = data["sim_time_min"]
-        return simHour, simMinute
+        sim_hour = data["sim_time_hour"]
+        sim_minute = data["sim_time_min"]
+        return sim_hour, sim_minute
 
     except requests.exceptions.RequestException as e:
         print(f"Error connecting to server: {e}")
         return None, None
 
-def getBatteryCapacity():
+
+def get_battery_capacity():
     url = "http://127.0.0.1:5000/info"
 
     try:
@@ -147,75 +139,89 @@ def getBatteryCapacity():
         response.raise_for_status()
 
         data = response.json()
-        batteryCapacity = data["battery_capacity_kWh"]
-        return batteryCapacity
+        battery_capacity = data["battery_capacity_kWh"]
+        return battery_capacity
 
     except requests.exceptions.RequestException as e:
         print(f"Error connecting to server: {e}")
         return None
 
-def getOptimalHoursandTotalLoad():
-    houseConsumption = getHouseConsumption()
-    chargerConsumption = 7.4
-    optimalHours = []
-    totalConsumption = []
 
-    for i, consumption in enumerate(houseConsumption):
-        if consumption + chargerConsumption <= 11:
-            optimalHours.append(i)
-            totalConsumption.append(consumption + chargerConsumption)
+def get_optimal_hours_and_total_consumption():
+    house_consumption = get_house_consumption()
+    charger_consumption = 7.4
+    optimal_hours = []
+    total_consumption = []
+
+    for i, consumption in enumerate(house_consumption):
+        if consumption + charger_consumption <= 11:
+            optimal_hours.append(i)
+            total_consumption.append(consumption + charger_consumption)
         else:
-            totalConsumption.append(consumption)
+            total_consumption.append(consumption)
 
-    return optimalHours, totalConsumption
+    return optimal_hours, total_consumption
 
-def simulateChargingProcess():
-    optimalHours, _ = getOptimalHoursandTotalLoad()
-    batteryCapacityLimit = 80
+
+def simulate_charging_lowest_consumption():
+    optimal_hours, _ = get_optimal_hours_and_total_consumption()
+    battery_capacity_limit = 80
 
     while True:
-        simHour, simMin = getServerTime()
-        batteryPercent = getBatteryPercent()
+        sim_hour, sim_min = get_server_time()
+        battery_percent = get_battery_percent()
 
-        if simHour is None or simMin is None:
+        if sim_hour is None or sim_min is None:
             print("Error in fetching simulation time")
             continue
 
-        if simHour not in optimalHours:
-            turnOffCharger()
-            print(f"Current time: {simHour}:{simMin}, Charging OFF, Battery: {round(batteryPercent)}%")
+        if sim_hour not in optimal_hours:
+            turn_off_charger()
+            print(f"Current time: {sim_hour}:{sim_min}, Charging OFF, Battery: {round(battery_percent)}%")
         else:
-            if batteryPercent < batteryCapacityLimit:
-                turnOnCharger()
-                print(f"Current time: {simHour}:{simMin}, Charging ON, Battery: {round(batteryPercent)}%")
-                # Fetch updated battery percentage
+            if battery_percent < battery_capacity_limit:
+                turn_on_charger()
+                print(f"Current time: {sim_hour}:{sim_min}, Charging ON, Battery: {round(battery_percent)}%")
                 time.sleep(0.1)
-                batteryPercent = getBatteryPercent()
-                if round(batteryPercent) >= batteryCapacityLimit:
-                    turnOffCharger()
-                    print(f"Battery reached {round(batteryCapacityLimit)}%, stopping charging.")
+                battery_percent = get_battery_percent()
+                if round(battery_percent) >= battery_capacity_limit:
+                    turn_off_charger()
+                    print(f"Battery reached {round(battery_capacity_limit)}%, stopping charging.")
                     break
             else:
-                turnOffCharger()
-                print(f"Battery reached {round(batteryCapacityLimit)}%, stopping charging.")
+                turn_off_charger()
+                print(f"Battery reached {round(battery_capacity_limit)}%, stopping charging.")
                 break
 
-def plotChargingSimulation():
+
+def simulate_charging_lowest_price():
+    optimal_hours, total_consumption = get_optimal_hours_and_total_consumption()
+    battery_percent = get_battery_percent()
+
+    while True:
+        sim_hour, sim_min = get_server_time()
+        if sim_hour is None or sim_min is None:
+            print("Error in fetching simulation time")
+            continue
+
+
+
+def plot_charging_simulation():
     hours = np.arange(24)
-    houseConsumption = getHouseConsumption()
-    optimalHours, totalConsumption = getOptimalHoursandTotalLoad()
+    house_consumption = get_house_consumption()
+    optimal_hours, total_consumption = get_optimal_hours_and_total_consumption()
 
     fig, ax1 = plt.subplots(figsize=(10, 6))
 
-    ax1.plot(hours, houseConsumption, label='House Consumption (kW)', color='blue', marker='o')
+    ax1.plot(hours, house_consumption, label='House Consumption (kW)', color='blue', marker='o')
 
-    ax1.plot(hours, totalConsumption, label='Total Consumption (kW)', color='orange', linestyle='--', marker='s')
+    ax1.plot(hours, total_consumption, label='Total Consumption (kW)', color='orange', linestyle='--', marker='s')
 
     ax1.set_xlabel('Hour of Day')
     ax1.set_ylabel('Consumption (kW)', color='blue')
     ax1.tick_params(axis='y', labelcolor='blue')
 
-    for hour in optimalHours:
+    for hour in optimal_hours:
         ax1.axvline(x=hour, color='green', linestyle='--', alpha=0.5)
 
     fig.suptitle('Charging Management Over 24 Hours')
@@ -224,21 +230,31 @@ def plotChargingSimulation():
     plt.grid()
     plt.show()
 
+
 print("Welcome to the EVCharging")
 
 isRunning = True
 
 while isRunning:
-    printMenu()
+    print_menu()
     userInput = input()
 
     try:
         option = int(userInput)
 
         if option == 1:
-            print(getPricePerHour())
+            data = get_house_consumption()
+            print("Price/h starting from 00:00: ")
+            output = ""
+            hour = 0
+
+            for price in data:
+                output += f"{hour}:00 - {price} öre\n"
+                hour = hour + 1
+
+            print(output)
         elif option == 2:
-            data = getHouseConsumption()
+            data = get_house_consumption()
             print(f"Household consumption starting from 00:00")
             hour = 0
             output = ""
@@ -248,46 +264,45 @@ while isRunning:
             print(output)
 
         elif option == 3:
-            userOption = 0
-            batteryPercent = getBatteryPercent()
-            turnOnCharger()
+            battery_percent = get_battery_percent()
+            turn_on_charger()
 
             print("Press '1' to stop charging")
 
-            stopCharging = False
+            stop_charging = False
 
             keyboard.add_hotkey('1', lambda:
-                                globals().update(stopCharging=True))
+            globals().update(stop_charging=True))
 
-            while batteryPercent < 80 and not stopCharging:
-                if batteryPercent is None:
+            while battery_percent < 80 and not stop_charging:
+                if battery_percent is None:
                     print("Failed to retrieve battery percentage, retrying...")
                     time.sleep(2)
-                    batteryPercent = getBatteryPercent()
+                    battery_percent = get_battery_percent()
                     continue
 
-                print(f"Battery charged: {round(batteryPercent)} %")
+                print(f"Battery charged: {round(battery_percent)} %")
                 time.sleep(1)
-                batteryPercent = getBatteryPercent()
+                battery_percent = get_battery_percent()
 
-            if stopCharging:
-                print(f"Stopping charging at {round(batteryPercent)} %")
+            if stop_charging:
+                print(f"Stopping charging at {round(battery_percent)} %")
             else:
                 print("Battery charged to 80%")
 
-            turnOffCharger()
+            turn_off_charger()
 
         elif option == 4:
-            simulateChargingProcess()
-            plotChargingSimulation()
+            simulate_charging_lowest_consumption()
+            plot_charging_simulation()
 
         elif option == 5:
             print("5. Charge to 80% during optimal electricity price")
         elif option == 6:
-            print(f"Battery is {round(getBatteryPercent())} % charged")
+            print(f"Battery is {round(get_battery_percent())} % charged")
         elif option == 7:
             discharge()
-            if round(getBatteryPercent()) == 20:
+            if round(get_battery_percent()) == 20:
                 print("Battery discharged to 20%")
             else:
                 print("Error discharging")
