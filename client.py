@@ -4,9 +4,9 @@ import time
 import keyboard
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 
 headers = { "Content-Type": "application/json" }
+
 
 def print_menu():
     print("---------------------------------------")
