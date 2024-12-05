@@ -159,6 +159,24 @@ def get_battery_capacity():
         return None
 
 
+def get_lowest_consumption_hours():
+    consumption_hours = list(enumerate(get_house_consumption()))
+
+    sorted_consumption = sorted(consumption_hours, key=lambda x: x[1])
+
+    #Timmar med lägst förbrukning (de 6 lägsta)
+    lowest_consumption_hours = [hour for hour, consumption in sorted_consumption[:6]]
+
+    return lowest_consumption_hours
+
+
+def get_lowest_price_hours(price_per_hour, num_hours=8):
+    price_hours = list(enumerate(price_per_hour))
+    sorted_prices = sorted(price_hours, key=lambda x: x[1])
+    lowest_price_hours = [hour for hour, price in sorted_prices[:num_hours]]
+    return lowest_price_hours
+
+
 def get_optimal_hours_and_total_consumption():
     house_consumption = get_house_consumption()
     charger_consumption = 7.4
@@ -175,6 +193,7 @@ def get_optimal_hours_and_total_consumption():
 
 def simulate_charging_lowest_consumption():
     optimal_hours, _ = get_optimal_hours_and_total_consumption()
+    lowest_consumptions = get_lowest_consumption_hours()
     battery_capacity_limit = 80
 
     while True:
@@ -190,7 +209,7 @@ def simulate_charging_lowest_consumption():
             print(f"Battery reached {round(battery_capacity_limit)}%, stopping charging.")
             break
 
-        if sim_hour not in optimal_hours:
+        if sim_hour not in optimal_hours and sim_hour not in lowest_consumptions:
             turn_off_charger()
             print(f"Current time: {sim_hour}:{sim_min}, Charging OFF, Battery: {round(battery_percent)}%")
         else:
@@ -198,7 +217,6 @@ def simulate_charging_lowest_consumption():
                 turn_on_charger()
                 print(f"Current time: {sim_hour}:{sim_min}, Charging ON, Battery: {round(battery_percent)}%")
                 time.sleep(0.1)
-                battery_percent = get_battery_percent()
             else:
                 turn_off_charger()
                 print(f"Battery reached {round(battery_capacity_limit)}%, stopping charging.")
@@ -206,14 +224,36 @@ def simulate_charging_lowest_consumption():
         time.sleep(1)
 
 
-def simulate_charging_lowest_price(price_limit):
+def simulate_charger_status(price_per_hour):
+    optimal_hours, total_consumption = get_optimal_hours_and_total_consumption()
+    battery_capacity_limit = 80
+    battery_percent = get_battery_percent()
+
+    lowest_price_hours = get_lowest_price_hours(price_per_hour)
+
+    charger_on_hours = []
+
+    for sim_hour in range(24):
+        if sim_hour not in optimal_hours or sim_hour not in lowest_price_hours:
+            continue
+        if battery_percent < battery_capacity_limit:
+            charger_on_hours.append(sim_hour)
+
+    return charger_on_hours
+
+
+def simulate_charging_lowest_price():
     optimal_hours, total_consumption = get_optimal_hours_and_total_consumption()
     battery_percent = get_battery_percent()
     price_per_hour = get_price_per_hour()
-    max_allowable_price = price_limit
+
+    if not price_per_hour:
+        print("Failed to retrieve price data.")
+        return
+
     battery_capacity_limit = 80
 
-    print(f"Max price is {max_allowable_price} öre")
+    lowest_price_hours = get_lowest_price_hours(price_per_hour)
 
     while True:
         sim_hour, sim_min = get_server_time()
@@ -227,14 +267,15 @@ def simulate_charging_lowest_price(price_limit):
             turn_off_charger()
             print(f"Battery reached {battery_capacity_limit}%, stopping charging.")
             break
+
         current_price = price_per_hour[sim_hour]
         print(
             f"Current time: {sim_hour}:{sim_min}, Battery: {round(battery_percent)}%, "
             f"Current price: {current_price} öre, Total consumption: {round(total_consumption[sim_hour], 2)}")
 
-        if sim_hour not in optimal_hours or current_price > max_allowable_price:
+        if sim_hour not in optimal_hours or sim_hour not in lowest_price_hours:
             turn_off_charger()
-            print("Charging OFF due to high electricity consumption or high price.")
+            print("Charging OFF due to high electricity consumption or not being a low-price hour.")
         elif battery_percent < battery_capacity_limit:
             turn_on_charger()
             print("Charging ON")
@@ -251,68 +292,71 @@ def simulate_charging_lowest_price(price_limit):
 def plot_simulation_lowest_consumption():
     hours = np.arange(24)
     optimal_hours, total_consumption = get_optimal_hours_and_total_consumption()
+    lowest_consumption_hours = get_lowest_consumption_hours()
 
     fig, ax1 = plt.subplots(figsize=(10, 6))
-    ax1.plot(hours, total_consumption, label='Total Consumption (kW)', color='orange', linestyle='--', marker='s')
+    ax1.plot(hours, total_consumption,
+             label='Total Consumption (kW)', color='orange', linestyle='--', marker='s')
 
     ax1.set_xlabel('Hour of Day')
     ax1.set_ylabel('Consumption (kW)', color='blue')
     ax1.tick_params(axis='y', labelcolor='blue')
     ax1.axhline(y=11, color='red', linestyle='--', label='Consumption Limit (11 kW)')
 
-    for hour in optimal_hours:
-        ax1.axvline(x=hour, color='green', linestyle='--', alpha=0.5)
-        ax1.fill_betweenx([0, 11], hour - 0.5, hour + 0.5, color='green', alpha=0.3)
+    # Highlighting lowest consumption hours
+    for hour in lowest_consumption_hours:
+        ax1.axvline(x=hour,
+                    color='purple', linestyle='--', alpha=0.5)
+        ax1.fill_betweenx([0, max(total_consumption)], hour - 0.5,
+                          hour + 0.5,
+                          color='purple', alpha=0.3)
 
-    fig.suptitle('Charging Management Over 24 Hours')
+    fig.suptitle('Charging Management Over 24 Hours with Lowest Consumption Hours Highlighted')
     fig.legend(loc='upper right', bbox_to_anchor=(1, 0.85))
 
     plt.grid()
     plt.show()
 
 
-def plot_combined_consumption_and_price(price_limit):
+def plot_combined_consumption_and_price():
     hours = np.arange(24)
-    energy_prices = get_price_per_hour()
-    max_allowable_price = price_limit
-    consumption_limit = 11
+    price_per_hour = get_price_per_hour()
+
+    if not price_per_hour:
+        print("Failed to retrieve price data.")
+        return
 
     optimal_hours, total_consumption = get_optimal_hours_and_total_consumption()
 
-    optimal_conditions_hours = [i for i in range(24) if
-                                total_consumption[i] <= consumption_limit and energy_prices[
-                                    i] <= max_allowable_price]
+    charger_on_hours = simulate_charger_status(price_per_hour)
 
     fig, ax1 = plt.subplots(figsize=(12, 6))
 
     ax1.plot(hours, total_consumption, label='Total Consumption (kW)', color='orange', linestyle='--', marker='s')
-    ax1.axhline(y=consumption_limit, color='red', linestyle='--', label=f'Consumption Limit ({consumption_limit} kW)')
+    ax1.axhline(y=11, color='red', linestyle='--', label='Consumption Limit (11 kW)')
 
     ax1.set_xlabel('Hour of Day')
     ax1.set_ylabel('Consumption (kW)', color='blue')
     ax1.tick_params(axis='y', labelcolor='blue')
 
     ax2 = ax1.twinx()
-    ax2.plot(hours, energy_prices, label='Energy Price (öre)', color='purple', marker='x')
-
-    ax2.axhline(y=max_allowable_price, color='red', linestyle='--',
-                label=f'Max Allowable Price ({max_allowable_price} öre)')
-
+    ax2.plot(hours, price_per_hour, label='Energy Price (öre)', color='purple', marker='x')
     ax2.set_ylabel('Energy Price (öre)', color='purple')
     ax2.tick_params(axis='y', labelcolor='purple')
 
-    for hour in optimal_conditions_hours:
-        ax1.axvline(x=hour, color='green', linestyle='--', alpha=0.5)
-        ax1.fill_betweenx([0, consumption_limit], hour - 0.5, hour + 0.5, color='green', alpha=0.3)
+    # Highlight the charger on hours
+    for hour in charger_on_hours:
+        ax1.axvline(x=hour, color='purple', linestyle='--', alpha=0.5)
+        ax1.fill_betweenx([0, max(total_consumption)], hour - 0.5,
+                          hour + 0.5,
+                          color='green', alpha=0.3)
 
-    fig.suptitle('Household Consumption and Energy Prices Over Time')
+    fig.suptitle('Household Consumption and Energy Prices with Charger Status')
 
-    ax1.set_xticks(hours)
+    lines_1, labels_1 = ax1.get_legend_handles_labels()
+    lines_2, labels_2 = ax2.get_legend_handles_labels()
 
-    lines_labels = [ax.get_legend_handles_labels() for ax in [ax1, ax2]]
-    lines, labels = [sum(lol, []) for lol in zip(*lines_labels)]
-
-    fig.legend(lines, labels, loc='upper right', bbox_to_anchor=(1, 0.85))
+    fig.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper right')
 
     plt.grid()
     plt.show()
@@ -384,9 +428,8 @@ while isRunning:
             plot_simulation_lowest_consumption()
 
         elif option == 5:
-            price_limit = int(input("Type in highest price: "))
-            simulate_charging_lowest_price(price_limit)
-            plot_combined_consumption_and_price(price_limit)
+            simulate_charging_lowest_price()
+            plot_combined_consumption_and_price()
         elif option == 6:
             print(f"Battery is {round(get_battery_percent())} % charged")
         elif option == 7:
@@ -399,7 +442,7 @@ while isRunning:
             isRunning = False
 
         else:
-            print("Invalid option, please choose number between 1 and 4.")
+            print("Invalid option, please choose number between 1 and 8.")
 
     except ValueError:
         print("Invalid input, please enter a number.")
